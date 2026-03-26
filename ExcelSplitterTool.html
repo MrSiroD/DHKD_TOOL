@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel Data Splitter Tool</title>
+    <!-- Use Tailwind CSS for rapid styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS for Excel processing -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <style>
+        .drag-active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-800">
+    <div class="max-w-4xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <div class="text-center mb-10">
+            <h1 class="text-3xl font-extrabold text-blue-600 sm:text-4xl">
+                Excel Data Splitter
+            </h1>
+            <p class="mt-3 max-w-2xl mx-auto text-xl text-gray-500 sm:mt-4">
+                Split an Excel file into multiple files based on the values in Column D.
+            </p>
+        </div>
+
+        <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <!-- Step 1: File Selection -->
+                <div class="mb-8">
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Step 1: Select Excel File</h3>
+                    <div id="dropZone" class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md transition-colors duration-200 cursor-pointer hover:border-blue-400 hover:bg-gray-50">
+                        <div class="space-y-1 text-center">
+                            <svg class="mx-auto h-12 w-12 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            <div class="flex text-sm text-gray-600 justify-center">
+                                <label for="fileInput" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500">
+                                    <span>Upload a file</span>
+                                    <input id="fileInput" name="fileInput" type="file" class="sr-only" accept=".xlsx, .xls, .csv">
+                                </label>
+                                <p class="pl-1">or drag and drop</p>
+                            </div>
+                            <p class="text-xs text-gray-500">
+                                XLSX, XLS, CSV up to 50MB
+                            </p>
+                        </div>
+                    </div>
+                    <div id="fileInfo" class="mt-4 hidden p-4 bg-green-50 rounded-md border border-green-200 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <svg class="h-5 w-5 text-green-400 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                            </svg>
+                            <span id="fileNameDisplay" class="text-sm font-medium text-green-800">filename.xlsx</span>
+                        </div>
+                        <button id="removeFileBtn" class="text-sm text-red-600 hover:text-red-800 font-medium">Remove</button>
+                    </div>
+                </div>
+
+                <!-- Step 2: Processing -->
+                <div>
+                    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">Step 2: Split and Save</h3>
+                    <p class="text-sm text-gray-500 mb-4">Click the button below to select a destination folder and start splitting the file based on Column D values.</p>
+                    <button id="processBtn" disabled class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors">
+                        Select Output Folder & Process
+                    </button>
+                </div>
+                
+                <!-- Progress and Logs -->
+                <div id="progressContainer" class="mt-6 hidden">
+                    <h4 class="text-sm font-medium text-gray-900 mb-2">Progress</h4>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                        <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+                    </div>
+                    <p id="progressText" class="text-sm text-gray-600 text-center mb-4">0%</p>
+                    
+                    <div class="bg-gray-900 rounded-md p-4 max-h-48 overflow-y-auto">
+                        <ul id="logOutput" class="text-xs text-green-400 font-mono space-y-1">
+                            <li>System ready...</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('fileInput');
+            const dropZone = document.getElementById('dropZone');
+            const fileInfo = document.getElementById('fileInfo');
+            const fileNameDisplay = document.getElementById('fileNameDisplay');
+            const removeFileBtn = document.getElementById('removeFileBtn');
+            const processBtn = document.getElementById('processBtn');
+            
+            const progressContainer = document.getElementById('progressContainer');
+            const progressBar = document.getElementById('progressBar');
+            const progressText = document.getElementById('progressText');
+            const logOutput = document.getElementById('logOutput');
+
+            let selectedFile = null;
+
+            // --- UI Event Listeners ---
+            
+            // File selection via input
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFileSelect(e.target.files[0]);
+                }
+            });
+
+            // Drag and Drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-active');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('drag-active');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-active');
+                if (e.dataTransfer.files.length > 0) {
+                    handleFileSelect(e.dataTransfer.files[0]);
+                }
+            });
+
+            // Click on dropzone to trigger input
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            // Remove selected file
+            removeFileBtn.addEventListener('click', () => {
+                selectedFile = null;
+                fileInput.value = '';
+                fileInfo.classList.add('hidden');
+                dropZone.classList.remove('hidden');
+                processBtn.disabled = true;
+                progressContainer.classList.add('hidden');
+            });
+
+            function handleFileSelect(file) {
+                // Check extension
+                const validExts = ['.xlsx', '.xls', '.csv'];
+                const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase();
+                if (!validExts.includes(ext)) {
+                    alert('Please select a valid Excel or CSV file (.xlsx, .xls, .csv)');
+                    return;
+                }
+                
+                selectedFile = file;
+                fileNameDisplay.textContent = file.name;
+                dropZone.classList.add('hidden');
+                fileInfo.classList.remove('hidden');
+                processBtn.disabled = false;
+            }
+
+            // --- Processing Logic ---
+
+            function log(message, type='info') {
+                const li = document.createElement('li');
+                li.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+                if (type === 'error') {
+                    li.classList.add('text-red-400');
+                } else if (type === 'success') {
+                    li.classList.add('text-green-400');
+                } else {
+                    li.classList.add('text-blue-300');
+                }
+                logOutput.appendChild(li);
+                // Auto scroll to bottom
+                logOutput.parentElement.scrollTop = logOutput.parentElement.scrollHeight;
+            }
+
+            processBtn.addEventListener('click', async () => {
+                if (!selectedFile) return;
+
+                // Check for File System Access API
+                if (!window.showDirectoryPicker) {
+                    alert("Your browser doesn't support the File System Access API. Please use Google Chrome, Edge, or Opera.");
+                    return;
+                }
+
+                try {
+                    progressContainer.classList.remove('hidden');
+                    logOutput.innerHTML = '';
+                    progressBar.style.width = '0%';
+                    progressText.textContent = '0%';
+                    processBtn.disabled = true;
+                    
+                    log('Selecting output folder...');
+                    const dirHandle = await window.showDirectoryPicker({
+                        mode: 'readwrite'
+                    });
+                    
+                    log(`Output folder selected: ${dirHandle.name}`);
+                    log('Reading input file...');
+                    
+                    const reader = new FileReader();
+                    reader.onload = async (e) => {
+                        try {
+                            const data = new Uint8Array(e.target.result);
+                            log('Parsing workbook...');
+                            const workbook = XLSX.read(data, {type: 'array'});
+                            
+                            const firstSheetName = workbook.SheetNames[0];
+                            const sheet = workbook.Sheets[firstSheetName];
+                            
+                            // To array of arrays
+                            log('Converting sheet to data array...');
+                            const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: ''});
+                            
+                            if (rows.length === 0) {
+                                throw new Error('The spreadsheet is empty.');
+                            }
+                            
+                            const header = rows[0];
+                            // Column D is index 3 (A=0, B=1, C=2, D=3)
+                            const colDIndex = 3;
+                            
+                            if (header.length <= colDIndex) {
+                                throw new Error('Spreadsheet does not have a Column D.');
+                            }
+                            
+                            log('Grouping rows by Column D...');
+                            const groups = {};
+                            let validRowsCount = 0;
+                            
+                            // Start from 1 to skip header
+                            for (let i = 1; i < rows.length; i++) {
+                                const row = rows[i];
+                                // Skip completely empty rows
+                                if (row.join('').trim() === '') continue;
+                                
+                                // Group key is the value in Column D
+                                let key = row[colDIndex];
+                                // Handle empty, undefined or object values
+                                if (key === undefined || key === null) key = 'Uncategorized';
+                                key = String(key).trim();
+                                if (key === '') key = 'Uncategorized';
+                                
+                                // Sanitize filename
+                                key = key.replace(/[\\/:*?"<>|]/g, '_');
+                                
+                                if (!groups[key]) {
+                                    groups[key] = [];
+                                }
+                                groups[key].push(row);
+                                validRowsCount++;
+                            }
+                            
+                            const groupKeys = Object.keys(groups);
+                            log(`Found ${groupKeys.length} unique groups from ${validRowsCount} rows.`, 'success');
+                            
+                            // Process each group
+                            let processedCount = 0;
+                            const totalGroups = groupKeys.length;
+                            
+                            for (const key of groupKeys) {
+                                const groupRows = groups[key];
+                                const newData = [header, ...groupRows];
+                                
+                                // Create new workbook
+                                const newSheet = XLSX.utils.aoa_to_sheet(newData);
+                                const newWb = XLSX.utils.book_new();
+                                XLSX.utils.book_append_sheet(newWb, newSheet, "Sheet1");
+                                
+                                // Generate file
+                                const wbout = XLSX.write(newWb, {bookType:'xlsx', type:'array'});
+                                
+                                // Save file
+                                const fullFileName = `${key}.xlsx`;
+                                log(`Saving ${fullFileName} (${groupRows.length} rows)...`);
+                                
+                                const fileHandle = await dirHandle.getFileHandle(fullFileName, {create: true});
+                                const writable = await fileHandle.createWritable();
+                                await writable.write(wbout);
+                                await writable.close();
+                                
+                                processedCount++;
+                                const percent = Math.round((processedCount / totalGroups) * 100);
+                                progressBar.style.width = `${percent}%`;
+                                progressText.textContent = `${percent}%`;
+                            }
+                            
+                            log(`Successfully created ${totalGroups} files in ${dirHandle.name}.`, 'success');
+                            processBtn.disabled = false;
+                            
+                        } catch (err) {
+                            log(`Processing error: ${err.message}`, 'error');
+                            console.error(err);
+                            processBtn.disabled = false;
+                        }
+                    };
+                    
+                    reader.onerror = () => {
+                        log('Error reading file.', 'error');
+                        processBtn.disabled = false;
+                    };
+                    
+                    reader.readAsArrayBuffer(selectedFile);
+                    
+                } catch (err) {
+                    if (err.name === 'AbortError') {
+                        log('Folder selection cancelled.', 'error');
+                    } else {
+                        log(`Error: ${err.message}`, 'error');
+                    }
+                    console.error(err);
+                    processBtn.disabled = false;
+                }
+            });
+        });
+    </script>
+</body>
+</html>
